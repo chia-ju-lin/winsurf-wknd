@@ -1,0 +1,445 @@
+(function($, Granite, undefined) {
+    'use strict';
+
+    var ns = ".cq-projects-admin-taskdetails";
+    var taskDetailsNS = ".taskdetails";
+    var completeButton = ".completeDetailsTask";
+    var shotListTaskComplete = ".completeShotListTask";
+    var updateButton = ".updateDetailsTask";
+    var uploadNS = ".taskdtails.upload";
+    var uploadButton = ".cq-damadmin-admin-actions-asset-upload-activator";
+    var addCommentButton = ".task-comment-addnew";
+    var deleteCommentButton = ".task-comment-delete";
+    var payloadDisplay = ".payloadDetailsTask";
+    var shotListTask = ".shotListTask";
+    var taskReviewButton = ".payloadDetailsTask";
+
+    var ui = $(window).adaptTo("foundation-ui");
+    var JAN_24_RELEASE_FT = "FT_FORMS-11709";
+
+    $(document).off("fileuploadsuccess"+uploadNS, "span.coral-FileUpload");
+    $(document).on("fileuploadsuccess"+uploadNS, "span.coral-FileUpload", function(e) {
+        var newFileName = e.item.fileName;
+        var taskId = getUrlVar("item");
+
+        var targetUrl = Granite.HTTP.externalize("/libs/granite/taskmanager/updatetask?taskId=" + taskId + "&_charset_=utf-8");
+        // get existing contentPath
+
+        // attempt to use the foundation-content-path:
+        var existingContentPath = $(".foundation-content-path").data("foundation-content-path");
+
+        if (!existingContentPath || 0 == existingContentPath.length) {
+            existingContentPath = $("[name=contentPath]").val();
+        }
+
+        if (existingContentPath && endsWith(existingContentPath, newFileName)) {
+            // the content path did not change
+            return;
+        } else {
+            ui.wait();
+
+            // could be that the filename has changed but same path
+            // could be that the path used to be a folder and now is a full path
+
+            var lastSlash = existingContentPath.lastIndexOf('/');
+
+            var newContentPath;
+            // if we find a "." after the last slash we assume we have a file in the current payload which is being replaced
+            if (existingContentPath.substr(lastSlash).indexOf('.') != -1 ) {
+                newContentPath = existingContentPath.substr(0, lastSlash) + "/" + newFileName;
+            } else {
+                newContentPath = existingContentPath + "/" + newFileName;
+            }
+            var data = {contentPath : newContentPath};
+
+            var ajaxOptions = {
+                url: targetUrl,
+                type: "post",
+                data: JSON.stringify(data),
+                contentType: "application/json; charset=utf-8",
+                dataType: "json",
+                success: function(data, status, request) {
+                    setTimeout(function(){
+                        ui.clearWait();
+                        var contentApi = $(".foundation-content").adaptTo("foundation-content");
+                        contentApi.refresh();
+                    }, 1000);
+                },
+                error: function(jqXHR, message, error) {
+                    ui.clearWait();
+                    ui.alert(Granite.I18n.get("Error"), message, "error");
+                }
+            };
+            $.ajax(ajaxOptions);
+        }
+    });
+
+    $(document)
+        .off("foundation-contentloaded" + taskDetailsNS)
+        .on("foundation-contentloaded" + taskDetailsNS, function(e) {
+            var form = $("#updatetaskform");
+
+            var statusValue = $("[name='status']", form).val();
+            if ( statusValue !== "ACTIVE" ) {
+                $(completeButton).attr("disabled", "disabled");
+                $(updateButton).attr("disabled", "disabled");
+                $(taskReviewButton).attr("disabled", "disabled");
+                //GRANITE-4258 until it's resolved we hide
+                $(uploadButton).closest(".coral-FileUpload").remove();
+            } else {
+                $(completeButton).removeAttr("disabled");
+                $(updateButton).removeAttr("disabled");
+                $(uploadButton).removeAttr("disabled");
+                $(taskReviewButton).removeAttr("disabled");
+            }
+    });
+
+    $(document).on("foundation-contentloaded" + taskDetailsNS, function(e) {
+        var $form = $("form.task");
+        var projectPath = $form.data("project");
+
+        // find the project path field
+        var $cuiSelectList = $(".coral-Autocomplete .coral-SelectList", $form);
+        var originalURL = $cuiSelectList.attr("data-task-original-url");
+        var updatedURL = $cuiSelectList.attr("data-granite-autocomplete-src");
+        if (originalURL === undefined || originalURL === "") {
+            $cuiSelectList.attr("data-task-original-url", updatedURL);
+            originalURL = updatedURL;
+        }
+        $cuiSelectList.attr("data-granite-autocomplete-src", originalURL + "&projectPath="+projectPath);
+    });
+
+    $(document)
+        .off("foundation-model-dataloaded" + taskDetailsNS)
+        .on("foundation-model-dataloaded" + taskDetailsNS, function(e) {
+
+            var form = $("#updatetaskform");
+
+            if ( form.data("model").get("status") !== "ACTIVE" ) {
+                $(completeButton).attr("disabled", "disabled");
+                $(updateButton).attr("disabled", "disabled");
+                //GRANITE-4258 until it's resolved we hide
+                $(uploadButton).closest(".coral-FileUpload").remove();
+            } else {
+                $(completeButton).removeAttr("disabled");
+                $(updateButton).removeAttr("disabled");
+                $(uploadButton).removeAttr("disabled");
+            }
+    });
+
+    function endsWith(str, suffix) {
+        return str.indexOf(suffix, str.length - suffix.length) !== -1;
+    }
+
+    function checkTaskAction() {
+        var actionSelect = $("#taskCompletionDialog").find("coral-select");
+        if ( actionSelect.length > 0 ) {
+            if (!actionSelect.val()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    function submitForm($form, completeTask) {
+        var postUrl = $form.attr("action");
+        var taskId = getUrlVar("item");
+
+        var taskModel = new Granite.TaskManagement.domain.TaskModel({id:taskId});
+        taskModel.postUrl = postUrl;
+        taskModel.set($form.serializeAsJSON(), {silent: true});
+
+        // now fix the assignee -> formfield is named 'asignee' to match the persisted task,
+        // however taskmanager expects ownerId
+        taskModel.set("ownerId", taskModel.get("assignee"));
+        taskModel.set("assignee", undefined);
+
+        taskModel.set("title", taskModel.get("name"))
+
+        if (completeTask) {
+            var actionSelect = $("#taskCompletionDialog").find("select");
+            if ( actionSelect.length > 0 ) {
+                taskModel.set("action", actionSelect.val());
+            }
+            taskModel.set("comment", $("[name=comment]", "#taskCompletionDialog").val());
+
+            return taskModel.completeWithUpdate();
+        } else {
+            return taskModel.updateDetails();
+        }
+    }
+
+    function returnToPrevious(form) {
+        var panelSelector = form.data("foundationFormOutputReplace") || form.data("foundationFormOutputPush");
+        if (panelSelector) {
+            var contentAPI = $(panelSelector).adaptTo("foundation-content");
+            if (contentAPI) {
+                contentAPI.back();
+                $(document).trigger("foundation-history-change");
+            }
+        }
+    }
+
+    function getUrlVar(key){
+        var result = new RegExp(key + "=([^&]*)", "i").exec(window.location.search);
+        return result && decodeURIComponent(result[1]) || "";
+    }
+
+    $(document).on('click' + ns, updateButton, function (e) {
+        ui.wait();
+        var form = $("#updatetaskform");
+
+        e.preventDefault();
+
+        submitForm(form, false)
+            .done(function (data, textStatus, xhr) {
+                ui.clearWait();
+                if (form.data("redirect")) {
+                    var ref = form.data("redirect");
+                    if (Granite && Granite.Toggles && Granite.Toggles.isEnabled(JAN_24_RELEASE_FT)) {
+                        ref = sanitizeURL(ref);
+                    }
+                    window.location = ref;// + "&_charset_=utf-8&_ck=" + Date.now();
+                } else {
+                    returnToPrevious(form);
+                }
+            }).fail(function (xhr) {
+                ui.clearWait();
+                form.trigger("foundation-form-submit-callback", [xhr]);
+            });
+    });
+
+    function completeTask() {
+        var form = $("#updatetaskform");
+        var dialog = $("#taskCompletionDialog");
+        var select = dialog.find("coral-select").get(0);
+
+        if (select) {
+            if ($(".cq-projects-admin-task-actions input").length > 0) {
+                $(".cq-projects-admin-task-actions input").each(function () {
+                    select.items.clear();
+                    select.items.add({
+                        content: {
+                            innerHTML: $(this).attr('name')
+                        },
+                        value: $(this).val()
+                    });
+                });
+            } else {
+                select.remove();
+            }
+        }
+
+        dialog.get(0).show();
+        dialog.find(".task-complete-dialog-submit")
+            .off('click' + ns)
+            .on('click' + ns, function() {
+                var that = this;
+
+
+                if (!checkTaskAction()) {
+                    // this should somehow indicate that the
+                    // selected action is invalid.
+                    return;
+                }
+
+                ui.wait();
+                this.disabled = true;
+
+                submitForm(form, true)
+                    .done(function() {
+                        if (form.data("redirect")) {
+                            window.location = form.data("redirect");// + "&_charset_=utf-8&_ck=" + Date.now();
+                        } else {
+                            returnToPrevious(form);
+                        }
+                    })
+                    .fail(function (xhr) {
+                        form.trigger("foundation-form-submit-callback", [xhr]);
+                    })
+                    .always(function() {
+                        ui.clearWait();
+                        that.disabled = false;
+                    });
+        });
+    }
+
+    $(document).on('click' + ns, completeButton, function (e) {
+        completeTask();
+    });
+
+    $(document).on('click' + ns, shotListTaskComplete, function (e) {
+        ui.wait();
+
+        $.ajax({
+            url: "/project.shotlist.html" + $("#updatetaskform").data("project"),
+            type: 'POST',
+            async: false,
+            data: {
+                finalize: true,
+                outputFolder: $("div.hiddenParams").data("workflow"),
+                '_charset_':'utf-8'
+                },
+            success:function(data, status, jqxhr) {
+                ui.clearWait();
+                completeTask();
+            },
+            error:function(jqxhr, status, err) {
+                ui.clearWait();
+                ui.alert(err, Granite.I18n.get("Unable to finalize shot list"), "error");
+            }
+        });
+    });
+
+    $(document).on('click' + ns, addCommentButton, function(e) {
+        var $theButton = $(this);
+        var $form = $theButton.closest("form");
+        var $commentTarget = $($theButton.data("commentTargetRef"));
+
+        var $mesageField = $form.find("[name='message']");
+        var messageText = $mesageField.val();
+        if (messageText === undefined || messageText === "" || messageText.trim() === "") {
+            return;
+        }
+
+        // show the wait spinner
+        ui.wait();
+
+        var project = $("#updatetaskform").data("project");
+
+        $theButton.attr('disabled','disabled');
+        $mesageField.val("");
+
+
+        var data = {
+            "message" : messageText,
+            "task" : $form.find("[name=':postUrl']").val(),
+            ":operation" : "granite:comment",
+            "_charset_" : "utf-8",
+            ":redirect" : Granite.HTTP.externalize($form.find("[name=':redirect']").val()),
+            "subFolder" : $form.find("[name='subFolder']").val()
+        };
+
+        var ajaxOptions = {
+            url: Granite.HTTP.externalize(project),
+            type: "post",
+            data: data,
+            success: function(data, status, request) {
+                if (status === "success" ) {
+                    $commentTarget.empty().append($(data).children());
+                }
+                $theButton.removeAttr("disabled");
+                ui.clearWait();
+            },
+            error: function(jqXHR, message, error) {
+                $mesageField.val(messageText);
+                $theButton.removeAttr("disabled");
+                ui.clearWait();
+                ui.alert(error, Granite.I18n.get("Unable to add the new comment"), "error");
+            }
+        };
+        $.ajax(ajaxOptions);
+
+     });
+
+    $(document).on('click' + ns, deleteCommentButton, function(e) {
+        // show the wait spinner
+        ui.wait();
+
+        var $theButton = $(this);
+        var $form = $theButton.closest("form");
+
+        var data =  {
+            ":operation" : "delete",
+            "_charset_" : "utf-8",
+            ":redirect" : Granite.HTTP.externalize($form.find("[name=':redirect']").val()) + "&_charset_=utf-8"
+        };
+
+        var postUrl = Granite.HTTP.externalize($(this).data("target"));
+
+        var ajaxOptions = {
+            url: postUrl,
+            type: "post",
+            data: data,
+            success: function(data, status, request) {
+                if (status === "success" ) {
+                    $theButton.closest(".cq-tasks-comments").empty().append($(data).children());
+                }
+                $theButton.removeAttr("disabled");
+                ui.clearWait();
+            },
+            error: function(jqXHR, message, error) {
+                ui.clearWait();
+                ui.alert(error, Granite.I18n.get("Unable to delete the comment"), "error");
+            }
+        };
+        $.ajax(ajaxOptions);
+
+    });
+
+    $(document).on('click' + ns, payloadDisplay, function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $target = $(e.target);
+        var url = $target.closest("button").data("href");
+        var project = $target.closest("form#updatetaskform").data("project");
+        var task = getUrlVar("item");
+        var contentPath = $("#updatetaskform input[name='contentPath']").val();
+        task = encodeURIComponent(task);
+        project = encodeURIComponent(project);
+        if (project.length) {
+            url += encodeURI(contentPath) + "?item=" + task + "&project=" + project + "&content=" + encodeURIComponent(contentPath);
+        } else {
+            url += encodeURI(contentPath) + "?item=" + task + "&content=" + encodeURIComponent(contentPath);
+        }
+        if ( url) {
+            window.location = Granite.HTTP.externalize(url)  + "&_charset_=utf-8";
+        }
+    });
+
+    $(document).on('click' + ns, shotListTask, function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var $target = $(e.target).closest(shotListTask);
+        var url = $target.data("href");
+        var project = $target.closest("form#updatetaskform").data("project");
+        var task = getUrlVar("item");
+        url += "/etc/commerce/products?item=" + project + "&task=" + task;
+        if ( url && project) {
+            window.location = Granite.HTTP.externalize(url);
+        }
+    });
+
+    $(document).off("dropzonedragover" + uploadNS)
+        .on("dropzonedragover" + uploadNS, function(event) {
+            var message = Granite.I18n.get("Drag and drop to upload");
+            var dragAndDropMessage = $('<div class=\"drag-drop-message\"><h1 > <span>{</span>' + message + '<span>}</span></h1></div>');
+            $('#updatetaskform').overlayMask('show',
+                dragAndDropMessage);
+        });
+
+    $(document).off("dropzonedrop" + uploadNS)
+        .on("dropzonedrop"  + uploadNS, clearDropzoneOverlay);
+
+    $(document).off("dropzonedragleave" + uploadNS)
+        .on("dropzonedragleave" + uploadNS, clearDropzoneOverlay);
+
+    function clearDropzoneOverlay() {
+        $('#updatetaskform').overlayMask('hide');
+    }
+
+    function sanitizeURL(path) {
+        try {
+            var url = new URL(path, document.baseURI);
+            if (url.origin !== "null") {
+                path = url.pathname + url.searchParams;
+                return(path);
+            } else {
+                return "";
+            }
+        } catch(error) {
+            return "";
+        }
+    }
+
+})(Granite.$, Granite);

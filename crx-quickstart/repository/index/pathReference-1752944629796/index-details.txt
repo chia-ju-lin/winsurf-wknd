@@ -1,0 +1,5 @@
+#Index metadata
+#Sat Jul 19 19:03:49 CEST 2025
+creationTime=1752944629889
+indexPath=/oak\:index/pathReference
+metaFormatVersion=1

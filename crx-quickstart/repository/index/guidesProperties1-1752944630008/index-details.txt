@@ -1,0 +1,5 @@
+#Index metadata
+#Sat Jul 19 19:03:59 CEST 2025
+creationTime=1752944639839
+indexPath=/oak\:index/guidesProperties-1
+metaFormatVersion=1

@@ -1,0 +1,5 @@
+#Index metadata
+#Sat Jul 19 19:03:50 CEST 2025
+creationTime=1752944630287
+indexPath=/oak\:index/appsLibsLucene
+metaFormatVersion=1

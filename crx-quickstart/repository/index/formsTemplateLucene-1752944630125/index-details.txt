@@ -1,0 +1,5 @@
+#Index metadata
+#Sat Jul 19 19:03:53 CEST 2025
+creationTime=1752944633272
+indexPath=/oak\:index/formsTemplateLucene
+metaFormatVersion=1

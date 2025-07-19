@@ -1,0 +1,396 @@
+/*
+ * ADOBE CONFIDENTIAL
+ *
+ * Copyright 2014 Adobe Systems Incorporated
+ * All Rights Reserved.
+ *
+ * NOTICE:  All information contained herein is, and remains
+ * the property of Adobe Systems Incorporated and its suppliers,
+ * if any.  The intellectual and technical concepts contained
+ * herein are proprietary to Adobe Systems Incorporated and its
+ * suppliers and may be covered by U.S. and Foreign Patents,
+ * patents in process, and are protected by trade secret or copyright law.
+ * Dissemination of this information or reproduction of this material
+ * is strictly forbidden unless prior written permission is obtained
+ * from Adobe Systems Incorporated.
+ */
+(function (document, $) {
+    "use strict";
+
+    /**
+     * Get the handler for the foundation.link action from foundation-registry
+     */
+    function getFoundationLinkHandler() {
+        var registeredActions = $(window).adaptTo("foundation-registry").get("foundation.collection.action.action");
+        var foundationLinkHandler = undefined;
+        if (registeredActions && registeredActions.length > 0) {
+            $.each(registeredActions, function(index, actionHandlerObj) {
+                if (actionHandlerObj.name == "foundation.link") {
+                    foundationLinkHandler = actionHandlerObj.handler;
+                    return false;
+                }
+            });
+        }
+
+        return foundationLinkHandler;
+    }
+
+    /**
+     * Replicates one or more activities
+     * @param activities an array of activity paths
+     * @param action the action to perform -
+     */
+    function replicateActivities(activities, action, url) {
+        var data = {activities: activities};
+        var ui = $(window).adaptTo("foundation-ui");
+        ui.wait();
+        return $.post(url, data).done(function() {
+            var msg = (action === 'activate') ? Granite.I18n.get("The activity has been published") : Granite.I18n.get("The activity has been unpublished");
+            ui.notify(null, msg);
+        }).fail(function(error) {
+            ui.alert(
+                Granite.I18n.get("Error"),
+                error.responseJSON.error ? error.responseJSON.error : Granite.I18n.get("Failed to replicate activities."),
+                "error"
+            );
+        });
+    }
+
+    var actionRegistry = $(window).adaptTo("foundation-registry");
+
+    // register 'cq.personalization.replicate' action
+    actionRegistry.register("foundation.collection.action.action",{
+        name: 'cq.personalization.replicate',
+        handler: function(name, el, config, collection, selections) {
+            var $content = $('.foundation-content');
+
+            var ui = $(window).adaptTo("foundation-ui");
+
+            var activities = [];
+            var activityPath = $('.activity-overview-header').data("activity-path");
+            if (activityPath) {
+                activities.push(activityPath);
+            }
+
+            if (selections.length > 0 || activityPath) {
+                $.each(selections, function (index, element) {
+                    var $el = $(element);
+                    activities.push($el.data('foundation-collection-item-id'));
+                });
+
+                var firstActivity = activityPath ? activityPath : activities[0];
+                var url = firstActivity + '/jcr:content.' + config.data.action + '.json';
+                replicateActivities(activities, config.data.action, url)
+                    .always(function() {
+                        alwaysUpdateUI(ui, collection);
+                    });
+                }
+            }
+    });
+
+    actionRegistry.register("foundation.collection.action.action", {
+        name:"cq.personalization.activity.card.edit",
+        handler: function(name, el, config, collection, selections) {
+            var activator = $(this),
+                activityPath = activator.data("activity-path");
+            var ambitPath = activator.data("ambit-path");
+
+            if (!ambitPath) {
+                ambitPath = activityPath.substring(0, activityPath.lastIndexOf("/"));
+            }
+
+            var location = "/libs/cq/personalization/touch-ui/content/activities/createactivitywizard.html" + ambitPath + "?activity=" + activityPath;
+
+            window.open(location,"_blank");
+        }
+    });
+
+    actionRegistry.register("foundation.collection.action.action", {
+        name:"cq.personalization.activity.card.replicate",
+        handler: function(name, el, config, collection, selections) {
+            console.log(arguments);
+            var activator = $(this),
+                activityPath = activator.data("activity-path"),
+                ui = $(window).adaptTo("foundation-ui");
+
+            var url = activityPath + "/jcr:content." + config.data.action + ".json";
+            replicateActivities([activityPath], config.data.action, url)
+                .always(function() {
+                    alwaysUpdateUI(ui, collection);
+                });
+        }
+    });
+
+    var alwaysUpdateUI = function(ui, collection) {
+        if (ui) {
+            ui.clearWait();
+        }
+        var $collection = $(collection).adaptTo("foundation-collection");
+        if ($collection) {
+            $collection.reload();
+        }
+    };
+
+    actionRegistry.register("foundation.collection.action.action", {
+        name: 'cq.personalization.edit.activity',
+        handler: function() {
+            var editWizardURL = new URL($(this).data('editWizardPath')).href;
+            var $activityHeader = $('.activity-overview-header');
+            var activityPath = new URL($activityHeader.data("activity-path"), window.location.origin).pathname;
+            var brandPath = new URL($activityHeader.data("brand-path"), window.location.origin).pathname;
+
+            if (editWizardURL && activityPath && brandPath) {
+                try {
+                    if (!editWizardURL.protocol.match(/^https?:$/)){
+                        console.error('Invalid URL:');
+                        return;
+                    }
+                }
+                catch (e) {
+                    console.error( 'Invalid URL :', e.message);
+                    return;
+                }
+                var fullURL= new URL( editWizardURL + brandPath + "?activity=" + activityPath);
+                window.open(fullURL.href, "_blank");
+            }
+        }
+    });
+
+    // register 'cq.personalization.audience.create' action
+    $(window).adaptTo("foundation-registry").register("foundation.collection.action.action",{
+        name: 'cq.personalization.audience.create',
+        handler: function(name, el, config, collection, selections) {
+
+            // show the target cloud configuration selection dialog
+            var targetCCDialog = $("#target-cc-dialog");
+            if (targetCCDialog.length > 0) {
+                targetCCDialog[0].show();
+            }
+        }
+    });
+
+    function editTargetAudience(audienceObj) {
+
+        var windowUI = $(window).adaptTo("foundation-ui");
+
+        if (!audienceObj.audienceJson) {
+            windowUI.notify("", Granite.I18n.get("Cannot edit selected audience since it was not locally created!"), "info");
+            return;
+        }
+
+        var profileParameterToken = "\"PROFILE\"";
+        if (audienceObj.audienceJson
+            && JSON.stringify(audienceObj.audienceJson).indexOf(profileParameterToken) >= 0) {
+
+            // add a loading screen only when editing a profile parameter audience
+            windowUI.wait();
+            $(document).one(AudiencePickerHelper.PROFILE_ATTRIBUTES_LOADED_EVENT, function(event) {
+                windowUI.clearWait();
+            });
+        }
+
+        var workflowConfigRules = AudiencePickerHelper.getAudienceWorkflowConfigRules("tnt", audienceObj.targetCloudConfigurationPath);
+
+        var audienceEditorWf = new TSDK.UI.AudienceWorkflow({
+            config: {
+                fullscreen: true
+            },
+            rules: workflowConfigRules
+        }).on('audience:created', function (audience) {
+            AudienceManagement.editTargetAudience(audience, audienceObj.targetCloudConfigurationPath, audienceObj.targetAudiencePath, function () {
+                windowUI.notify("", Granite.I18n.get("Successfully modified audience"), "success");
+                audienceEditorWf.closeWorkflow();
+                window.location.reload();
+            }, function (xhr) {
+                var message = Granite.I18n.get("Your audience could not be saved successfully. Please try again.");
+                if (xhr && xhr.responseJSON && xhr.responseJSON.errorMessage) {
+                    // Granite.I18n.get("Your activity could not be saved successfully. Reason: Activity with this name already exists!")
+                    message = Granite.I18n.get("Your audience could not be saved successfully.<br>Reason: {0}", xhr.responseJSON.errorMessage);
+                }
+
+                windowUI.prompt(Granite.I18n.get("Error"),
+                    message,
+                    "error",
+                    [{
+                        id: "ok",
+                        text: Granite.I18n.get("Close")
+                    }]
+                );
+            });
+        });
+
+        audienceEditorWf.setData(audienceObj.audienceJson);
+
+        Coral.commons.nextFrame(function() {
+            audienceEditorWf.openWorkflow();
+        });
+    };
+
+    // register 'cq.personalization.audience.edit' action
+    $(window).adaptTo("foundation-registry").register("foundation.collection.action.action",{
+        name: 'cq.personalization.audience.edit',
+        handler: function(name, el, config, collection, selections) {
+
+            var configOverride = $.extend(true, {}, config);
+            var selectedAudience = $(selections);
+
+            if ($(selections).find("coral-card").length > 0) {
+                selectedAudience = $($(selections).find("coral-card")[0]);
+            }
+
+            var audienceType = selectedAudience.data("audience-type");
+
+            /* use classic UI for CC segments */
+            if ((audienceType === 'CC') && config && config.data) {
+                var href = config.data.href || '';
+
+                configOverride.data.href = href.replace(/\/editor\.html/, '');
+            }
+
+            if (audienceType == "AT") {
+                var jqSelections = selectedAudience;
+
+                // start the audience edit workflow for target audiences
+                editTargetAudience({
+                    targetAudiencePath: jqSelections.data("foundation-collection-item-id"),
+                    targetCloudConfigurationPath: jqSelections.data("cloud-config-path"),
+                    audienceJson: jqSelections.data("audience-json")
+                });
+            } else {
+                // dispatch to foundation.link action handler
+                var foundationLinkHandler = getFoundationLinkHandler();
+                if (foundationLinkHandler) {
+                    foundationLinkHandler.call(this, name, el, configOverride, collection, selections);
+                }
+            }
+        }
+    });
+
+    // register 'cq.personalization.segment-properties.edit' action
+    $(window).adaptTo("foundation-registry").register("foundation.collection.action.action", {
+        name: 'cq.personalization.segment-properties.edit',
+        handler: function(name, el, config, collection, selections) {
+            var foundationLinkHandler = getFoundationLinkHandler();
+
+            if (foundationLinkHandler) {
+                foundationLinkHandler.call(this, name, el, $.extend(true, {}, config), collection, selections);
+            }
+        }
+    });
+
+    /**
+     * Ensures visibility of an action for single selections only.
+     *
+     * @param {Element}
+     *            selections The foundation-selections-item element
+     * @param {String}
+     *            selector CSS selector of the action
+     * @param {Function}
+     *            customPredicate Optional callback for show/hide logic which
+     *            takes selections, selector as arguments.
+     */
+    var singleSelectionAction = function(selections, selector, customPredicate) {
+        if (customPredicate && typeof customPredicate === 'function') {
+            customPredicate.call(this,selections, selector);
+        } else {
+            if (selections.length == 1) {
+                $(selector).show();
+            } else {
+                $(selector).hide();
+            }
+        }
+    };
+
+    $(document).on("foundation-selections-change", ".foundation-collection", function(){
+        var selections = $(".foundation-selections-item");
+        // Audience Edit Action
+        singleSelectionAction(selections, "#edit-segment-action", function(selections, selector) {
+            var action = $(selector);
+            var isActionAvailable = false;
+
+            if (selections.length === 1) {
+                var audienceType = selections.data("audience-type");
+                var audienceId = selections.data('foundation-collection-item-id') || '';
+
+                if (audienceType === "folder" || selections.children("coral-card").first().data("audience-type") === "folder") {
+                    $("#edit-segment-action").hide();
+                    $('#edit-segment-properties-action').hide();
+                    return;
+                }
+
+                /* segment properties action available only for ContextHub segments */
+                $('#edit-segment-properties-action').toggleClass('hidden', audienceType !== 'CH');
+
+                if (audienceType === "AT") {
+                    isActionAvailable = $(selections).data("audience-json") !== null;
+                } else {
+                    /* only segments in /conf/ can be edited */
+                    isActionAvailable = audienceId.match(/^\/conf\//) !== null;
+                }
+            }
+
+            action.toggle(isActionAvailable);
+        });
+        // Offer Properties Action
+        singleSelectionAction(selections, ".cq-personalization-actions-properties-activator");
+    });
+
+    $(document).on("foundation-contentloaded", function (e) {
+        //set foundationCollectionId when accesing the root page and no suffix is present. This is needed by omnisearch.
+        var $collection = $('coral-shell-content').find('.foundation-collection');
+        if (!$collection.data('foundationCollectionId')) {
+            $collection.data('foundationCollectionId', '/content/campaigns');
+        }
+
+        // handle the target audience creation
+        $("#select-target-cc-button-confirm").off("click").on("click", function (event) {
+            // hide the dialog
+            $("#target-cc-dialog")[0].hide();
+
+            var audienceCCPath = $("[name='targetConfig']").val();
+            if (!audienceCCPath) {
+                return;
+            }
+
+            var windowUI = $(window).adaptTo("foundation-ui");
+
+            var workflowConfigRules = AudiencePickerHelper.getAudienceWorkflowConfigRules("tnt", audienceCCPath);
+
+            // kick off the target audience creation wizard
+            var audienceCreatorWf = new TSDK.UI.AudienceWorkflow({
+                config: {
+                    fullscreen: true
+                },
+                rules: workflowConfigRules
+            }).on('audience:created', function (audience) {
+                AudienceManagement.createTargetAudience(audience, audienceCCPath, function () {
+                    windowUI.notify("", Granite.I18n.get("Successfully created new audience"), "success");
+                    audienceCreatorWf.closeWorkflow();
+                    window.location.reload();
+                }, function (xhr) {
+                    var message = Granite.I18n.get("Your audience could not be saved successfully. Please try again.");
+                    if (xhr && xhr.responseJSON && xhr.responseJSON.errorMessage) {
+                        // Granite.I18n.get("Your activity could not be saved successfully. Reason: Activity with this name already exists!")
+                        message = Granite.I18n.get("Your audience could not be saved successfully.<br>Reason: {0}", xhr.responseJSON.errorMessage);
+                    }
+
+                    windowUI.prompt(Granite.I18n.get("Error"),
+                        message,
+                        "error",
+                        [{
+                            id: "ok",
+                            text: Granite.I18n.get("Close")
+                        }]
+                    );
+                });
+            });
+
+
+            Coral.commons.nextFrame(function() {
+                audienceCreatorWf.openWorkflow();
+            });
+        });
+
+    });
+
+})(document, Granite.$);

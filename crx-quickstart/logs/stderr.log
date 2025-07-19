@@ -1,0 +1,15 @@
+Low-memory action set to fork
+Using 64bit VM settings, min.heap=1024MB, min permgen=256MB, default fork arguments=[-Xmx1024m, -XX:MaxPermSize=256m]
+The JVM reports a heap size of 4096 MB, meets our expectation of 1024 MB +/- 20
+Setting properties from filename 'C:/Users/chia-ju.lin/IdeaProjects/winnsurf/wknd/aem-sdk-quickstart-2024.6.16799.20240614T073455Z-240500.jar'
+Setting 'sling.run.modes' to 'author,nosamplecontent' from command line.
+Verbose option not active, closing stdin and redirecting stdout and stderr
+Redirecting stdout to C:\Users\chia-ju.lin\IdeaProjects\winnsurf\wknd\crx-quickstart\logs\stdout.log
+Redirecting stderr to C:\Users\chia-ju.lin\IdeaProjects\winnsurf\wknd\crx-quickstart\logs\stderr.log
+ResourceProvider paths=[/gui, /gui/default]
+RAWProcessor succesfully installed
+Warning: Nashorn engine is planned to be removed from a future JDK release
+Warning: Nashorn engine is planned to be removed from a future JDK release
+Warning: Nashorn engine is planned to be removed from a future JDK release
+Warning: Nashorn engine is planned to be removed from a future JDK release
+Warning: Nashorn engine is planned to be removed from a future JDK release
