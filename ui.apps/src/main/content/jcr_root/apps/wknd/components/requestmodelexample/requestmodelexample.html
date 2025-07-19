@@ -1,0 +1,20 @@
+<div class="cmp-request-model-example"
+     data-sly-use.model="com.adobe.aem.guides.wknd.core.models.RequestBasedModel">
+    <h2>Request-Based Sling Model Example</h2>
+    
+    <div class="cmp-request-model-example__content">
+        <h3>Properties from both the resource and request:</h3>
+        <ul>
+            <li><strong>Title (from content):</strong> ${model.title || 'No title property found'}</li>
+            <li><strong>Current Resource Path:</strong> ${model.currentResourcePath}</li>
+            <li><strong>Query Parameter:</strong> ${model.queryParameter || 'No query parameter found. Try adding ?param=test to the URL'}</li>
+            <li><strong>User Agent:</strong> ${model.userAgent}</li>
+        </ul>
+        
+        <p class="cmp-request-model-example__note">
+            This component is using a Request-based Sling Model that can access properties from both
+            the content repository and the HTTP request. To see request parameters in action,
+            add ?param=something to the URL and refresh the page.
+        </p>
+    </div>
+</div>

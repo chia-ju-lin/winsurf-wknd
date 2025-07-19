@@ -1,0 +1,18 @@
+<div class="cmp-resource-model-example"
+     data-sly-use.model="com.adobe.aem.guides.wknd.core.models.ResourceBasedModel">
+    <h2>Resource-Based Sling Model Example</h2>
+    
+    <div class="cmp-resource-model-example__content">
+        <h3>Properties read directly from the content resource:</h3>
+        <ul>
+            <li><strong>Title:</strong> ${model.title || 'No title property found'}</li>
+            <li><strong>Description:</strong> ${model.description || 'No description property found'}</li>
+            <li><strong>Created Date:</strong> ${model.createdDate || 'No jcr:created property found'}</li>
+        </ul>
+        
+        <p class="cmp-resource-model-example__note">
+            This component is using a Resource-based Sling Model that can only access properties 
+            stored in the content repository. Add properties to this component's dialog to see them displayed here.
+        </p>
+    </div>
+</div>
